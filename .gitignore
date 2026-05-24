@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Flask
+instance/
+.webassets-cache
+
+# Flutter
+.dart_tool/
+.packages
+build/
+
+# VSCode
+.vscode/
+
+# Linux
+*.swp
+
+# macOS
+.DS_Store
