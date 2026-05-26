@@ -14,16 +14,16 @@ def register_account():
     
     data = request.get_json()
     
-    name = data.get("name")
+    username = data.get("username")
     email = data.get("email")
     password = data.get("password")
     
     query_user = """
         SELECT * FROM users
-        WHERE email = %s;
+        WHERE email = ?;
     """
     
-    cursor.execute(query_user, (email, ))
+    cursor.execute(query_user, (email,))
     
     user_exists = cursor.fetchone()
     
@@ -39,11 +39,11 @@ def register_account():
     
     query_insert = """
         INSERT INTO users(name, email, password)
-        VALUES (%s, %s, %s)
+        VALUES (?, ?, ?)
     """
     
     values = (
-        name,
+        username,
         email,
         password_hash.decode("utf-8")
     )
@@ -69,7 +69,7 @@ def login():
 
     query_user = """
         SELECT * FROM users
-        WHERE email = %s
+        WHERE email = ?;
     """
 
     cursor.execute(query_user, (email,))
