@@ -1,5 +1,4 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token
+from flask import Blueprint, request, jsonify, session
 
 import bcrypt
 
@@ -91,15 +90,52 @@ def login():
             "error": "Credenciais inválidas"
         }), 401
 
-    access_token = create_access_token(
-        identity=user["id"]
-    )
+    session["user_id"] = user["id"]
 
     return jsonify({
-        "token": access_token,
+        "message": "Login realizado com sucesso",
+        
         "user": {
             "id": user["id"],
             "name": user["name"],
             "email": user["email"]
         }
     }), 200
+    
+@auth_bp.route("/logout", methods=["POST"])
+def logout():
+    
+    session.clear()
+    
+    return jsonify({
+        "message": "Logout realizado com sucesso"
+    }), 200
+    
+@auth_bp.route("/me", methods=["GET"])
+def me():
+    
+    user_id = session.get("user_id")
+    
+    if not user_id:
+        return jsonify({
+            "error": "Não autenticado"
+        }), 401
+        
+    query_user = """
+        SELECT id, name, email
+        FROM users
+        WHERE id = ?;
+    """
+    
+    cursor.execute(query_user, (user_id,))
+    
+    user = cursor.fetchone()
+    
+    return jsonify({
+        "user": {
+            "id": user["id"],
+            "name": user["name"],
+            "email": user["email"]
+        },
+    }), 200
+
