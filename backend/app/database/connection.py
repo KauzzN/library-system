@@ -1,11 +1,10 @@
-import pymysql
+import sqlite3
 
-connection = pymysql.connect(
-    host="localhost",
-    user="root",
-    password="senha",
-    database="library_db",
-    cursorclass=pymysql.cursors.DictCursor
+connection = sqlite3.connect(
+    "app/database/database.db",
+    check_same_thread=False
 )
+
+connection.row_factory = sqlite3.Row
 
 cursor = connection.cursor()
