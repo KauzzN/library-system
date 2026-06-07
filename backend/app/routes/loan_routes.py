@@ -8,7 +8,7 @@ loans_hp = Blueprint(
     url_prefix="/loans"
 )
 
-@loans_hp.route("create", methods=["POST"])
+@loans_hp.route("/create", methods=["POST"])
 def create_loan():
     
     user_id = session.get("user_id")
@@ -178,7 +178,7 @@ def return_loan(loans_id):
     cursor.execute(query_find_book, (loans_id,))
     book_id = cursor.fetchone()
     
-    cursor.execute(query_update_book, (book_id))
+    cursor.execute(query_update_book, (book_id["book_id"],))
     connection.commit()
     
     return jsonify({
