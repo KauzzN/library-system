@@ -1,310 +1,130 @@
-import secrets
 
-from datetime import datetime, timedelta
-
+import random
 from flask import Blueprint, request, jsonify, session
-from flask_mail import Message
-
-import bcrypt
-
+import pymysql
+from flask_mail import Mail, Message
 from app.extensions.mail import mail
-from app.database.connection import connection, cursor
 
-auth_bp = Blueprint("auth", __name__)
+codigo_recuperado_gerado = None
 
-
-# Register
-@auth_bp.route("/register", methods=["POST"])
-def register_account():
-    
-    data = request.get_json()
-    
-    username = data.get("username")
-    email = data.get("email")
-    password = data.get("password")
-    
-    query_user = """
-        SELECT * FROM users
-        WHERE email = ?;
-    """
-    
-    cursor.execute(query_user, (email,))
-    
-    user_exists = cursor.fetchone()
-    
-    if user_exists:
-        return jsonify({
-            "error": "Usuário já existe"
-        }), 409
-        
-    password_hash = bcrypt.hashpw(
-        password.encode("utf-8"),
-        bcrypt.gensalt()
+def conectaDB():
+    db = pymysql.connect(
+        host='localhost',
+        database='bibliotecadb',
+        user='root',
+        passwd='admin'
     )
-    
-    query_insert = """
-        INSERT INTO users(name, email, password)
-        VALUES (?, ?, ?)
-    """
-    
-    values = (
-        username,
-        email,
-        password_hash.decode("utf-8")
-    )
-    
-    cursor.execute(query_insert, values)
-    
-    connection.commit()
-    
-    return jsonify({
-        "message": "Usuário criado com sucesso"
-    }), 201
-    
+    return db
 
+auth_bp = Blueprint(
+    "auth",
+    __name__, 
+    url_prefix="/auth"
+)
 
 # LOGIN
 @auth_bp.route("/login", methods=["POST"])
 def login():
+    banco = None
+    try:
+        data = request.get_json()
+        email = data.get("email")
+        senha = data.get("senha")
 
-    data = request.get_json()
+        banco = conectaDB()
+        cursor = banco.cursor()
 
-    email = data.get("email")
-    password = data.get("password")
+        sql = f"Call Login('{email}', '{senha}');"
+        cursor.execute(sql)
 
-    query_user = """
-        SELECT * FROM users
-        WHERE email = ?;
-    """
+        resultado = cursor.fetchone()
+        if resultado:
+            response = {"message": "Login realizado com sucesso", "codigo": 200, 
+                        "gerente": {"email": resultado[1], "senha": resultado[2]}}
+            session["user_id"] = resultado[0]
+        else:
+            response = {"error": "Email ou senha incorretos", "codigo": 401}
+    except Exception as e:
+        print("Erro ao realizar login:", e)
+        response = {"error": "Falha ao realizar login", "codigo": 401, "erro": str(e)}
+    finally:
+        if banco is not None:
+            banco.close()
+    return jsonify(response)
 
-    cursor.execute(query_user, (email,))
-
-    user = cursor.fetchone()
-
-    if not user:
-        return jsonify({
-            "error": "Credenciais inválidas"
-        }), 401
-
-    password_correct = bcrypt.checkpw(
-        password.encode("utf-8"),
-        user["password"].encode("utf-8")
-    )
-
-    if not password_correct:
-        return jsonify({
-            "error": "Credenciais inválidas"
-        }), 401
-
-    session["user_id"] = user["id"]
-
-    return jsonify({
-        "message": "Login realizado com sucesso",
-        
-        "user": {
-            "id": user["id"],
-            "name": user["name"],
-            "email": user["email"]
-        }
-    }), 200
-    
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
     
     session.clear()
     
     return jsonify({
-        "message": "Logout realizado com sucesso"
-    }), 200
+        "message": "Logout realizado com sucesso"}), 200
     
-@auth_bp.route("/me", methods=["GET"])
-def me():
-    
-    user_id = session.get("user_id")
-    
-    if not user_id:
-        return jsonify({
-            "error": "Não autenticado"
-        }), 401
-        
-    query_user = """
-        SELECT id, name, email
-        FROM users
-        WHERE id = ?;
-    """
-    
-    cursor.execute(query_user, (user_id,))
-    
-    user = cursor.fetchone()
-    
-    return jsonify({
-        "user": {
-            "id": user["id"],
-            "name": user["name"],
-            "email": user["email"]
-        },
-    }), 200
-
 @auth_bp.route("/forgot-password", methods=["POST"])
 def forgot_password():
-    
-    data = request.get_json()
-    
-    email = data.get("email")
-    
-    query_user = """
-        SELECT * FROM users
-        WHERE email = ?;
-    """
-    
-    cursor.execute(query_user, (email,))
-    
-    user = cursor.fetchone()
-    
-    if not user:
-        return jsonify({
-            "error": "Usuário não encontrado"
-        }), 404
-    
-    token = secrets.token_urlsafe(32)
-    
-    expires_at = (
-        datetime.now() + timedelta(minutes=30)
-    )
-    
-    query_insert = """
-        INSERT INTO password_resets(user_id, token, expires_at)
-        VALUES (?, ?, ?);
-    """
-    
-    values = (user["id"], token, expires_at)
-    cursor.execute(query_insert, values)
-    
-    connection.commit()
-    
-    reset_link = (
-        f"http://localhost:5000//validade-reset-token/{token}"
-    )
-    
-    msg = Message(
-        subject="Recuperação de senha",
-        recipients=[email]
-    )
-    
-    msg.body = f"""
-        Olá!
-        
-        Recebemos uma solicitação para redefinir sua senha.
-        
-        Clique no link abaixo:
-        
-        {reset_link}
-        
-        Este link expira em 30 minutos.
-        
-        Caso não tenha solicitado a alteração,
-        ignore este email.
-    """
-    
-    mail.send(msg)
-    
-    return jsonify({
-        "message": "Email enviado com sucesso"
-    }), 200
-    
-    
-@auth_bp.route("/validade-reset-token/<token>", methods=["GET"])
-def validade_reset_token(token):
-    query = """
-        SELECT * FROM password_resets
-        WHERE token = ?
-        AND used = 0
-    """
-    
-    cursor.execute(query, (token,))
-    
-    reset = cursor.fetchone()
-    
-    if not reset:
-        return jsonify({
-            "error": "Token inválido"
-        }), 400
-        
-    expires_at = datetime.fromisoformat(
-        reset["expires_at"]
-    )
-    
-    if datetime.now() > expires_at:
-        return jsonify({
-            "error": "link expirado"
-        }), 400
-        
-    return jsonify({
-        "valid": True
-    }), 200
-    
+    banco = None
+    try:
+        data = request.get_json()
+        email = data.get("email")
 
-@auth_bp.route("/reset-password", methods=["POST"])
+        banco = conectaDB()
+        cursor = banco.cursor()
+        sql = f"Call RecuperarSenha('{email}');"
+        cursor.execute(sql)
+
+        resultado = cursor.fetchone()
+        if resultado:
+            msg = Message("Recuperação de senha", sender="biblioteca.ex.ads@gmail.com", recipients=[email])
+            global codigo_recuperado_gerado
+            codigo_recuperado_gerado = random.randint(100000, 999999)
+            msg.body = f"Olá, {resultado[0]}! Use o seguinte código para recuperar sua senha: {codigo_recuperado_gerado}"
+            mail.send(msg)
+
+            response = {"message": "Código de recuperação enviado para o email", "codigo": 200, 
+                        "Gerente": {"id": resultado[0], "login": resultado[1], "email": resultado[2]}}
+        else:
+            response = {"error": "Email não encontrado", "codigo": 404}
+    except Exception as e:
+        print("Erro ao enviar email de recuperação:", e)
+        response = {"error": "Falha ao enviar email de recuperação", "codigo": 400, "erro": str(e)}
+    finally:
+        if banco is not None:
+            banco.close()
+
+    return jsonify(response)
+
+@auth_bp.route("/reset-password", methods=["PUT"])
 def reset_password():
-    
-    data = request.get_json()
-    
-    token = data.get("token")
-    
-    new_password = data.get(
-        "new_password"
-    )
-    
-    query_token  = """
-        SELECT * FROM password_resets
-        WHERE token = ?
-        AND used = 0;
-    """
-    
-    cursor.execute(query_token, (token,))
-    
-    reset = cursor.fetchone()
-    
-    if not reset:
-        return jsonify({
-            "error": "Token inválido"
-        }), 400
+    global codigo_recuperado_gerado
+    banco = None
+    try:
+        data = request.get_json()
+        email = data.get("email")
+        codigo_recuperacao_recebido = data.get("codigoRecuperacao")
+        nova_senha = data.get("novaSenha")
         
-    expires_at = datetime.fromisoformat(
-        reset["expires_at"]
-    )
-    
-    if datetime.now() > expires_at:
-        return jsonify({
-            "error": "link expirado"
-        }), 400
-        
-    password_hash = bcrypt.hashpw(
-        new_password.encode("utf-8"),
-        bcrypt.gensalt()
-    )
-    
-    query_update = """
-        UPDATE users
-        SET password = ?
-        WHERE id = ?;
-    """
-    
-    cursor.execute(query_update, (password_hash.decode("utf-8"), reset["user_id"]))
-    
-    query_used = """
-        UPDATE password_resets
-        SET used = 1
-        WHERE id = ?;
-    """
-    
-    cursor.execute(query_used, (reset["id"],))
+        print(f"Codigo recebido: {codigo_recuperacao_recebido}, Codigo gerado: {codigo_recuperado_gerado}")
 
-    connection.commit()
-    
-    return jsonify({
-        "message": "Senha alterada com sucesso"
-    }), 200
+        codigo_recuperacao_recebido = int(codigo_recuperacao_recebido)
+        if codigo_recuperado_gerado is None or codigo_recuperacao_recebido != codigo_recuperado_gerado:
+            return jsonify({"error": "Codigo de recuperação invalido", "codigo": 400})
+        
+        banco = conectaDB()
+        cursor = banco.cursor()
+
+        # Use CALL with parameterized query to avoid SQL syntax errors and injection
+        sql = "CALL AtualizarSenha(%s, %s);"
+        cursor.execute(sql, (nova_senha, email))
+        banco.commit()
+
+        response = {"message": "Senha atualizada com sucesso", "codigo": 200}
+    except Exception as e:
+        print("Erro ao atualizar senha:", e)
+        response = {"error": "Falha ao atualizar senha", "codigo": 400, "erro": str(e)}
+    finally:
+        if banco is not None:
+            banco.close()
+    return jsonify(response)
     
     
     

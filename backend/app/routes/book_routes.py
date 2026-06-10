@@ -1,6 +1,14 @@
 from flask import Blueprint, request, jsonify, session
+import pymysql
 
-from app.database.connection import connection, cursor
+def conectaDB():
+    db = pymysql.connect(
+        host='localhost',
+        database='bibliotecadb',
+        user='root',
+        passwd='admin'
+    )
+    return db
 
 books_hp = Blueprint(
     "books",
@@ -8,191 +16,129 @@ books_hp = Blueprint(
     url_prefix="/books"
 )
 
+@books_hp.route("/list", methods=["GET"])
+def read_books():
+    listaLivros = []
+
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Não autenticado"}), 401
+    
+    try:
+        banco = conectaDB()
+        cursor = banco.cursor()
+
+        sql = "Call GetLivros();"
+        cursor.execute(sql)
+        resultado = cursor.fetchall()
+
+        for livro in resultado:
+            listaLivros.append(
+                {
+                    "id": livro[0],
+                    "nome": livro[1],
+                    "categoria": livro[2],
+                    "status": livro[3],
+                    "estoque": livro[4]
+                }
+            )
+    except Exception as e:
+        print("Erro ao consultar livros:", e)
+        return jsonify({"error": "Falha ao listar livros"}), 500
+    finally:
+            banco.close()
+
+    return jsonify(listaLivros)
+
 @books_hp.route("/create", methods=["POST"])
 def create_book():
-    
     user_id = session.get("user_id")
-    
     if not user_id:
-        return jsonify({
-            "error": "Não autenticado"
-        }), 401
-        
-    data = request.get_json()
-    
-    title = data.get("title")
-    author = data.get("author")
-    quantity = data.get("quantity")
-    category_id = data.get("category_id")
-    
-    query_category = """
-        SELECT * FROM categories
-        WHERE id = ?
-        AND user_id = ?
-    """
-    
-    cursor.execute(query_category, (category_id, user_id))
-    
-    category = cursor.fetchone()
-    
-    if not category:
-        return jsonify({
-            "message": "Categoria inválida"
-        }), 400
-    
-    query = """
-        INSERT INTO books(
-            user_id, category_id, title, author, quantity
-        )
-        VALUES (?, ?, ?, ?, ?)
-    """
-    
-    values = (
-        user_id, 
-        category_id,
-        title,
-        author,
-        quantity
-    )
-    
-    cursor.execute(query, values)
-    
-    connection.commit()
-    
-    return jsonify({
-        "message": "Livro cadastrado com sucesso"
-    }), 201
-    
-@books_hp.route("/listar", methods=["GET"])
-def read_books():
+        return jsonify({"error": "Não autenticado"}), 401
 
-    user_id = session.get("user_id")
-    
-    query_books = """
-        SELECT * FROM books
-        WHERE user_id = ?;
-    """
-    
-    cursor.execute(query_books, (user_id,))
-    
-    books = cursor.fetchall()
-    
-    if not books:
-        return jsonify({
-            "error": "nenhum livro cadastrado"
-        }), 401
-        
-    books_list = []
-    
-    for book in books:
-        
-        books_list.append({
-            "id": book["id"],
-            "title": book["title"],
-            "author": book["author"],
-            "quantity": book["quantity"],
-            "category_id": book["category_id"]
-        })
-        
-    return jsonify({"books": books_list}), 200
-        
-@books_hp.route("/<int:book_id>", methods=["GET"])
-def get_book(book_id):
-    
-    user_id = session.get("user_id")
-    
-    if not user_id:
-        return jsonify({
-            "error": "Não autenticado"
-        }), 401
-        
-    query = """
-        SELECT * FROM books
-        WHERE id = ?
-        AND user_id = ?;
-    """
-    
-    cursor.execute(query, (
-        book_id,
-        user_id
-    ))
-    
-    book = cursor.fetchone()
-    
-    if not book:
-        return jsonify({
-            "error": "livro não encontrado"
-        }), 404
-        
-    return jsonify({
-            "Book": {
-                "title": book["title"],
-                "author": book["author"],
-                "quantity": book["quantity"],
-                "category_id": book["category_id"]
-            }
-        })
-    
-@books_hp.route("/<int:book_id>", methods=["PUT"])
+    getdata = request.get_json()
+    if not getdata:
+        return jsonify({"error": "JSON inválido ou vazio"}), 400
+
+    livros = getdata if isinstance(getdata, list) else [getdata]
+
+    try:
+        banco = conectaDB()
+        cursor = banco.cursor()
+
+        for livro in livros:
+            nome = livro.get("nome")
+            categoria = livro.get("categoria")
+            status = livro.get("status")
+            estoque = livro.get("estoque")
+
+            if nome is None or categoria is None or status is None or estoque is None:
+                return jsonify({"error": "Campos obrigatórios faltando"}), 400
+
+            sql = "CALL InsertLivro(%s, %s, %s, %s);"
+            cursor.execute(sql, (nome, categoria, status, estoque))
+
+        banco.commit()
+        response = {"mensagem": "Cadastrado com sucesso", "codigo": 200}
+    except Exception as e:
+        print("Erro ao cadastrar livro:", e)
+        response = {"mensagem": "Erro ao cadastrar livro", "codigo": 500, "erro": str(e)}
+        return jsonify(response), 500
+    finally:
+        banco.close()
+
+    return jsonify(response)
+
+@books_hp.route("/update/<int:book_id>", methods=["PUT"])
 def update_book(book_id):
-    
     user_id = session.get("user_id")
-    
     if not user_id:
-        return jsonify({
-            "error": "não autenticado"
-        }), 401
-        
-    data = request.get_json()
-    
-    title = data.get("title")
-    author = data.get("author")
-    quantity = data.get("quantity")
-    category = data.get("category_id")
-    
-    query = """
-        UPDATE books
-        SET 
-            title = ?,
-            author = ?,
-            quantity = ?,
-            category_id = ?
-        WHERE id = ?
-        AND user_id = ?;
-    """
-    
-    values = (title, author, quantity, category, book_id, user_id)
-    
-    cursor.execute(query, values)
-    
-    connection.commit()
-    
-    return jsonify({
-        "message": "Livro atualizado com sucesso"
-    }), 201
-    
-@books_hp.route("/<int:book_id>", methods=["DELETE"])
-def delete_book(book_id):
+        return jsonify({"error": "Não autenticado"}), 401
 
+    getdata = request.get_json()
+    nome = getdata["nome"]
+    categoria = getdata["categoria"]
+    status = getdata["status"]
+    estoque = getdata["estoque"]
+
+    try:
+        banco = conectaDB()
+        cursor = banco.cursor()
+
+        sql = "CALL AtualizarLivro(%s, %s, %s, %s, %s);"
+        cursor.execute(sql, (book_id, nome, categoria, status, estoque))
+        banco.commit()
+
+        response = {"mensagem": "Atualizado com sucesso", "codigo": 200}
+    except Exception as e:
+        print("Erro ao atualizar livro:", e)
+        response = {"mensagem": "Erro ao atualizar livro", "codigo": 500, "erro": str(e)}
+        return jsonify(response), 500
+    finally:
+        banco.close()
+
+    return jsonify(response)
+
+@books_hp.route("/delete/<int:book_id>", methods=["DELETE"])
+def delete_book(book_id):
     user_id = session.get("user_id")
-    
     if not user_id:
-        return jsonify({
-            "error": "não autenticado"
-        }), 401
-        
-    query = """
-        DELETE FROM books
-        WHERE id = ?
-        AND user_id = ?
-    """
-    
-    cursor.execute(query, (book_id, user_id))
-    
-    connection.commit()
-    
-    return jsonify({
-        "message": "livro deletado com sucesso"
-    }), 201
-    
-    
+        return jsonify({"error": "Não autenticado"}), 401
+
+    try:
+        banco = conectaDB()
+        cursor = banco.cursor()
+
+        sql = "CALL DeleteLivro(%s);"
+        cursor.execute(sql, (book_id,))
+        banco.commit()
+
+        response = {"mensagem": "Deletado com sucesso", "codigo": 200}
+    except Exception as e:
+        print("Erro ao deletar livro:", e)
+        response = {"mensagem": "Erro ao deletar livro", "codigo": 500, "erro": str(e)}
+        return jsonify(response), 500
+    finally:
+        banco.close()
+
+    return jsonify(response)
