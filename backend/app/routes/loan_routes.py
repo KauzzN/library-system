@@ -26,14 +26,16 @@ def create_loan():
     getdata = request.get_json()
     
     dias = getdata.get("dias")
+    nome = getdata.get("nome")
+    telefone = getdata.get("telefone")
+    cpf = getdata.get("cpf")
     idlivro = getdata.get("idlivro")
-    idcliente = getdata.get("idcliente")
 
     try:
         banco = conectaDB()
         cursor = banco.cursor()
 
-        cursor.execute("CALL InsertEmprestimo(%s, %s, %s);", (dias, idcliente, idlivro))
+        cursor.execute("CALL InsertEmprestimo(%s, %s, %s, %s, %s);", (dias, nome, telefone, cpf, idlivro))
         banco.commit()
 
         response = {"mensagem": f"Empréstimo cadastrado com sucesso", "codigo": 200}

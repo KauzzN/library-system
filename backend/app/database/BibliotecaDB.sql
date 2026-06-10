@@ -8,16 +8,10 @@ CREATE DATABASE BibliotecaDB;
 USE BibliotecaDB;
 
 drop table `emprestimo`;
-drop table `cliente`;
+drop table `logger`;
 drop table `gerente`;
 drop table `livro`;
 
-  create table `cliente` (
-  `idcliente` int primary key auto_increment,
-  `nome`varchar(100) not null,
-  `cpf` varchar(15) not null unique,
-  `telefone` varchar(20) not null,
-  `endereco`varchar(100) not null);
 
   create table `gerente` (
   `idgerente` int primary key auto_increment,
@@ -38,11 +32,17 @@ drop table `livro`;
   `idemprestimo` int primary key auto_increment,
   `data_emprestimo` DATE NOT NULL DEFAULT (CURRENT_DATE),
   `qtd_dias` int not null,
-  `fk_idcliente` INT NOT NULL,
+  `nome`varchar(100) not null,
+  `telefone` varchar(20) not null,
+  `cpf` varchar(15) not null unique,
   `fk_idlivro` INT NOT NULL,
-	CONSTRAINT `fk_emprestimo_cliente` FOREIGN KEY (`fk_idcliente`) REFERENCES cliente(`idcliente`),
 	CONSTRAINT `fk_emprestimo_livro` FOREIGN KEY (`fk_idlivro`) REFERENCES livro(`idlivro`),
 	CONSTRAINT `chk_emprestimo_qtd_dias` CHECK (`qtd_dias` > 0 and `qtd_dias` <= 60));
+    
+    create table `logger`(
+	`idlog` INT PRIMARY KEY AUTO_INCREMENT,
+    `mensagem` VARCHAR(255),
+    `data` DATETIME DEFAULT (CURRENT_TIMESTAMP));
   
 									-- Fluxos do gerente --
 -- Listar gerentes --
@@ -199,14 +199,14 @@ Call GetClientes();
 
 									-- Emprestimo --
 Delimiter %%
-Create procedure InsertEmprestimo(in p_dias int, in p_fkidcliente int, in p_fkidLivro int)
+Create procedure InsertEmprestimo(in p_dias int, in p_nome varchar(100), in p_telefone varchar(20), in p_cpf varchar(15), in p_fkidLivro int)
 begin
-	INSERT INTO emprestimo (qtd_dias, fk_idcliente, fk_idlivro)
-	VALUES (p_dias, p_fkidcliente, p_fkidLivro);
+	INSERT INTO emprestimo (qtd_dias, nome, telefone, cpf, fk_idlivro)
+	VALUES (p_dias, p_nome, p_telefone, p_cpf, p_fkidLivro);
 end %%
 Delimiter ;
 drop procedure InsertEmprestimo;
-Call InsertEmprestimo(@dias, @fk_idcliente, @fk_idlivro);
+Call InsertEmprestimo(@dias, @p_nome, @p_telefone, @p_cpf, @fk_idlivro);
 
 DELIMITER $$
 CREATE TRIGGER trg_validar_estoque
@@ -239,10 +239,16 @@ END $$
 DELIMITER ;
 
 									-- Devolução --
-DELETE e
-FROM emprestimo e
-INNER JOIN cliente c
-    ON e.fk_idcliente = 1;
+Delimiter %%
+Create procedure DeleteEmprestimo(in p_cpf varchar(100))
+begin
+	Delete from emprestimo
+    where cpf = p_cpf;
+end %%
+Delimiter ;
+drop procedure DeleteEmprestimo;
+Call DeleteEmprestimo(@p_cpf);
+
     
 DELIMITER $$
 CREATE TRIGGER trg_devolucao
@@ -256,8 +262,20 @@ BEGIN
 END $$
 DELIMITER ;
 
+								  -- logger --
+DELIMITER $$
+CREATE TRIGGER trg_log_emprestimo
+AFTER INSERT ON emprestimo
+FOR EACH ROW
+BEGIN
+	
+    INSERT INTO logger(mensagem) VALUES
+    (concat('Emprestimo realizado. Id inscrição: ', 
+    NEW.idemprestimo));
+END $$
+DELIMITER ;
 
--- Testando --
+                                 -- Testando --
 select * from emprestimo;
 select * from livro;
 select * from cliente;
