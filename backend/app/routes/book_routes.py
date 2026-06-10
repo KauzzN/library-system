@@ -6,7 +6,7 @@ def conectaDB():
         host='localhost',
         database='bibliotecadb',
         user='root',
-        passwd='admin'
+        passwd='120808'
     )
     return db
 

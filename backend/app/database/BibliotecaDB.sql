@@ -22,6 +22,7 @@ drop table `livro`;
   CREATE TABLE `livro` (
   `idlivro` int primary key auto_increment,
   `nome` varchar(100) not null,
+  `autor` varchar(120) not null,
   `categoria` varchar(100) not null,
   `status` varchar(50) not null,
   `estoque` int not null,

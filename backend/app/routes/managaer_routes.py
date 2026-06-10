@@ -5,9 +5,9 @@ import pymysql
 def conectaDB():
     db = pymysql.connect(
         host='localhost',
-        database='bibliotecadb',
+        database='library_system',
         user='root',
-        passwd='admin'
+        passwd='120808'
     )
     return db
 
