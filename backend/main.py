@@ -3,8 +3,8 @@ from app.extensions.mail import mail
 from app.routes.auth_routes import auth_bp
 from app.routes.book_routes import books_hp
 from app.routes.loan_routes import loans_hp
-from app.routes.client_routes import client_hp
 from app.routes.managaer_routes import manager_bp
+from app.routes.return_routes import returns_bp
 
 
 app = Flask(__name__)
@@ -22,8 +22,8 @@ mail.init_app(app)
 app.register_blueprint(auth_bp)
 app.register_blueprint(books_hp)
 app.register_blueprint(loans_hp)
-app.register_blueprint(client_hp)
 app.register_blueprint(manager_bp)
+app.register_blueprint(returns_bp)
 
 @app.route("/")
 def home():
