@@ -231,12 +231,25 @@ CREATE TRIGGER trg_emprestimo_reserva
 AFTER INSERT ON emprestimo
 FOR EACH ROW
 BEGIN
-    UPDATE livro
-    SET estoque = estoque - 1,
-        status = 'Reservado'
-    WHERE idlivro = NEW.fk_idlivro;
+	 DECLARE v_estoque INT;
+     
+     UPDATE livro
+		SET estoque = estoque - 1
+		WHERE idlivro = NEW.fk_idlivro;
+        
+     SELECT estoque INTO v_estoque
+        FROM livro
+        WHERE idlivro = NEW.fk_idlivro;
+
+     IF v_estoque <= 0 THEN
+        UPDATE livro
+		set status = 'Reservado'
+        WHERE idlivro = NEW.fk_idlivro;
+    END IF;
 END $$
 DELIMITER ;
+
+drop trigger trg_emprestimo_reserva;
 
 									-- Devolução --
 Delimiter %%
@@ -281,8 +294,10 @@ select * from livro;
 select * from cliente;
 select * from gerente;
 
-update gerente
-set email = "biblioteca.ex.ads@gmail.com";
+update livro
+set status = "Reservado"
+where idlivro = 6;
+
 DELETE FROM gerente;
 
 
