@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:library_system_mobile/pages/forgot_password_page.dart';
 import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:library_system_mobile/pages/home_page.dart';
+import 'package:library_system_mobile/pages/register_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -23,17 +28,24 @@ class _LoginPageState extends State<LoginPage> {
 
         headers: {"Content-Type": "application/json"},
 
-        body: jsonEncode({"email": email, "password": password}),
+        body: jsonEncode({"email": email, "senha": password}),
       );
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
+        final prefs = await SharedPreferences.getInstance();
+
+        await prefs.setString("token", data["token"]);
+
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(data["message"])));
 
-        print(data);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomePage()),
+        );
 
         // depois vamos navegar pra Home
       } else {
@@ -140,12 +152,27 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 16),
 
                 TextButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ForgotPasswordPage(),
+                      ),
+                    );
+                  },
 
                   child: const Text("Esqueci minha senha"),
                 ),
 
-                TextButton(onPressed: () {}, child: const Text("Criar conta")),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RegisterPage()),
+                    );
+                  },
+                  child: const Text("Criar conta"),
+                ),
               ],
             ),
           ),
