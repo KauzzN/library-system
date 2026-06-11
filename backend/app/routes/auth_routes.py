@@ -4,15 +4,20 @@ from flask import Blueprint, request, jsonify, session
 import pymysql
 from flask_mail import Mail, Message
 from app.extensions.mail import mail
+from flask_jwt_extended import (
+    create_access_token,
+    jwt_required,
+    get_jwt_identity
+)
 
-codigo_recuperado_gerado = None
+codigos_recuperacao = {}
 
 def conectaDB():
     db = pymysql.connect(
         host='localhost',
-        database='bibliotecadb',
+        database='library_system',
         user='root',
-        passwd='admin'
+        passwd='120808'
     )
     return db
 
@@ -39,9 +44,12 @@ def login():
 
         resultado = cursor.fetchone()
         if resultado:
+            access_token = create_access_token(
+                identity=str(resultado[0])
+            )
             response = {"message": "Login realizado com sucesso", "codigo": 200, 
-                        "gerente": {"email": resultado[1], "senha": resultado[2]}}
-            session["user_id"] = resultado[0]
+                        "token": access_token,
+                        "gerente": {"email": resultado[1]}}
         else:
             response = {"error": "Email ou senha incorretos", "codigo": 401}
     except Exception as e:
@@ -51,14 +59,6 @@ def login():
         if banco is not None:
             banco.close()
     return jsonify(response)
-
-@auth_bp.route("/logout", methods=["POST"])
-def logout():
-    
-    session.clear()
-    
-    return jsonify({
-        "message": "Logout realizado com sucesso"}), 200
     
 @auth_bp.route("/forgot-password", methods=["POST"])
 def forgot_password():
@@ -75,9 +75,10 @@ def forgot_password():
         resultado = cursor.fetchone()
         if resultado:
             msg = Message("Recuperação de senha", sender="biblioteca.ex.ads@gmail.com", recipients=[email])
-            global codigo_recuperado_gerado
-            codigo_recuperado_gerado = random.randint(100000, 999999)
-            msg.body = f"Olá, {resultado[0]}! Use o seguinte código para recuperar sua senha: {codigo_recuperado_gerado}"
+            codigo = random.randint(100000, 999999)
+            
+            codigos_recuperacao[email] = codigo
+            msg.body = f"Olá, {resultado[1]}! Use o seguinte código para recuperar sua senha: {codigo}"
             mail.send(msg)
 
             response = {"message": "Código de recuperação enviado para o email", "codigo": 200, 
@@ -95,19 +96,24 @@ def forgot_password():
 
 @auth_bp.route("/reset-password", methods=["PUT"])
 def reset_password():
-    global codigo_recuperado_gerado
     banco = None
     try:
         data = request.get_json()
         email = data.get("email")
-        codigo_recuperacao_recebido = data.get("codigoRecuperacao")
+        codigo_recuperacao_recebido = int(data.get("codigoRecuperacao"))
         nova_senha = data.get("novaSenha")
         
-        print(f"Codigo recebido: {codigo_recuperacao_recebido}, Codigo gerado: {codigo_recuperado_gerado}")
+        codigo_salvo = codigos_recuperacao.get(email)
+        
+        if codigo_salvo is None:
+            return jsonify({
+                "error": "nenhum código foi solicitado para este email"
+            }), 400
 
-        codigo_recuperacao_recebido = int(codigo_recuperacao_recebido)
-        if codigo_recuperado_gerado is None or codigo_recuperacao_recebido != codigo_recuperado_gerado:
-            return jsonify({"error": "Codigo de recuperação invalido", "codigo": 400})
+        if codigo_recuperacao_recebido != codigo_salvo:
+            return jsonify({
+                "error": "código inválido"
+            }), 400
         
         banco = conectaDB()
         cursor = banco.cursor()
@@ -117,6 +123,7 @@ def reset_password():
         cursor.execute(sql, (nova_senha, email))
         banco.commit()
 
+        codigos_recuperacao.pop(email, None)
         response = {"message": "Senha atualizada com sucesso", "codigo": 200}
     except Exception as e:
         print("Erro ao atualizar senha:", e)

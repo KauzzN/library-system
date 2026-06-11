@@ -1,12 +1,13 @@
 from flask import Blueprint, request, jsonify, session
+from flask_jwt_extended import (get_jwt_identity, jwt_required)
 import pymysql
 
 def conectaDB():
     db = pymysql.connect(
         host='localhost',
-        database='bibliotecadb',
+        database='library_system',
         user='root',
-        passwd='admin'
+        passwd='120808'
     )
     return db
 
@@ -17,9 +18,10 @@ loans_hp = Blueprint(
 )
 
 @loans_hp.route("/create", methods=["POST"])
+@jwt_required()
 def create_loan():
 
-    user_id = session.get("user_id")
+    user_id = get_jwt_identity()
     if not user_id:
         return jsonify({"error": "Não autenticado"}), 401
         
@@ -47,3 +49,43 @@ def create_loan():
             banco.close()
 
     return jsonify(response)
+
+@loans_hp.route("/read", methods=["GET"])
+@jwt_required()
+def read_loans():
+    
+    try:
+        banco = conectaDB()
+        cursor = banco.cursor(pymysql.cursors.DictCursor)
+        
+        sql = """
+            SELECT
+                e.idemprestimo,
+                l.nome AS livro,
+                e.nome,
+                e.telefone,
+                e.cpf,
+                e.qtd_dias
+            FROM emprestimo e
+            INNER JOIN livro l
+                ON e.fk_idlivro = l.idlivro;
+        """
+
+        cursor.execute(sql)
+        
+        loans = cursor.fetchall()
+        
+        return jsonify(loans), 200
+    
+    except Exception as e:
+        
+        print("Erro ao listar emprestimos:", e)
+        
+        return jsonify({
+            "error": str(e)
+        }), 500
+        
+    finally:
+        if banco:
+            banco.close()
+        
