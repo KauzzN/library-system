@@ -1,5 +1,8 @@
 from flask import Blueprint, request, jsonify, session
-
+from flask_jwt_extended import (
+    get_jwt_identity,
+    jwt_required
+)
 from app.database.connection import cursor, connection
 
 categories_bp = Blueprint(
@@ -9,9 +12,10 @@ categories_bp = Blueprint(
 )
 
 @categories_bp.route("/create", methods=["POST"])
+@jwt_required
 def create_category():
     
-    user_id = session.get("user_id")
+    user_id = get_jwt_identity
     
     if not user_id:
         return jsonify({
@@ -50,9 +54,10 @@ def create_category():
     }),201
     
 @categories_bp.route("/", methods=["GET"])
+@jwt_required
 def read_categorys():
     
-    user_id = session.get("user_id")
+    user_id = get_jwt_identity()
     
     if not user_id:
         return jsonify({
@@ -86,9 +91,10 @@ def read_categorys():
     return jsonify({"categories": categories_list}), 200
         
 @categories_bp.route("<int:category_id>", methods=["GET"])
+@jwt_required
 def get_category(category_id):
     
-    user_id = session.get("user_id")
+    user_id = get_jwt_identity()
     
     if not user_id:
         return jsonify({
@@ -119,9 +125,10 @@ def get_category(category_id):
     })
     
 @categories_bp.route("/<int:category_id>", methods=["PUT"])
+@jwt_required
 def update_category(category_id):
     
-    user_id = session.get("user_id")
+    user_id = get_jwt_identity()
 
     if not user_id:
         return jsonify({
@@ -151,9 +158,10 @@ def update_category(category_id):
     }), 201
     
 @categories_bp.route("/<int:category_id>", methods=["DELETE"])
+@jwt_required
 def delete_category(category_id):
     
-    user_id = session.get("user_id")
+    user_id = get_jwt_identity
     
     if not user_id:
         return jsonify({

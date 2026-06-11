@@ -32,12 +32,21 @@ def register_account():
         sql = f"Call InsertGerente('{login}', '{senha}', '{email}');"
         cursor.execute(sql)
         banco.commit()
-        response = {"mensagem": "Cadastrado com sucesso", "codigo": 200}
+        return jsonify({
+            "message": "Cadastrado com sucesso"
+        }), 200
+        
+    except pymysql.IntegrityError as e:
+        return jsonify({
+        "error": "Email ou login já cadastrado"
+    }), 400
+      
     except Exception as e:
         print("Erro ao cadastrar gerente:", e)
-        response = {"mensagem": "Erro ao cadastrar gerente", "codigo": 500, "erro": str(e)}
+        return jsonify({
+            "error": "Erro interno do servidor",
+        }), 500
+        
     finally:
         if banco:
             banco.close()
-
-    return jsonify(response)
